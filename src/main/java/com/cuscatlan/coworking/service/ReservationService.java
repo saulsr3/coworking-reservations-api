@@ -1,6 +1,7 @@
 package com.cuscatlan.coworking.service;
 
 import com.cuscatlan.coworking.dto.request.ReservationRequest;
+import com.cuscatlan.coworking.dto.response.PaymentValidationResult;
 import com.cuscatlan.coworking.dto.response.ReservationResponse;
 import com.cuscatlan.coworking.entity.Reservation;
 import com.cuscatlan.coworking.entity.ReservationStatus;
@@ -14,6 +15,7 @@ import com.cuscatlan.coworking.repository.UserRepository;
 import com.cuscatlan.coworking.state.ReservationState;
 import com.cuscatlan.coworking.state.ReservationStateFactory;
 import lombok.RequiredArgsConstructor;
+import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -35,8 +37,10 @@ public class ReservationService {
     private final SpaceService spaceService;
     private final ReservationMapper reservationMapper;
     private final NotificationService notificationService;
+    private final PaymentValidationService paymentValidationService;
 
     @Transactional
+    @CacheEvict(value = ReportService.CACHE_NAME, allEntries = true)
     public ReservationResponse create(ReservationRequest request, String userEmail) {
         if (!request.startTime().isBefore(request.endTime())) {
             throw new IllegalArgumentException("La hora de inicio debe ser anterior a la hora de fin");
@@ -65,9 +69,13 @@ public class ReservationService {
 
         reservation = reservationRepository.save(reservation);
 
-        applyTransition(reservation, ReservationState::confirm);
-
-        notificationService.sendReservationConfirmation(reservation);
+        PaymentValidationResult paymentResult = paymentValidationService.validate(reservation.getId());
+        if (paymentResult.approved()) {
+            applyTransition(reservation, ReservationState::confirm);
+            notificationService.sendReservationConfirmation(reservation);
+        } else {
+            applyTransition(reservation, ReservationState::markPendingPayment);
+        }
 
         return reservationMapper.toResponse(reservation);
     }
@@ -89,6 +97,7 @@ public class ReservationService {
     }
 
     @Transactional
+    @CacheEvict(value = ReportService.CACHE_NAME, allEntries = true)
     public ReservationResponse cancel(Long id, String userEmail, boolean isAdmin) {
         Reservation reservation = getReservationOrThrow(id);
 
@@ -99,7 +108,6 @@ public class ReservationService {
         applyTransition(reservation, ReservationState::cancel);
         return reservationMapper.toResponse(reservation);
     }
-
 
     private void applyTransition(Reservation reservation, Function<ReservationState, ReservationStatus> transition) {
         ReservationState currentState = ReservationStateFactory.forStatus(reservation.getStatus());
