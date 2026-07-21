@@ -54,6 +54,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.DELETE, SPACES_PATTERN).hasRole(ROLE_ADMIN)
                         .requestMatchers("/api/reports/**").hasRole(ROLE_ADMIN)
                         .requestMatchers("/api/reservations/admin/**").hasRole(ROLE_ADMIN)
+                        .requestMatchers("/api/users/**").hasRole(ROLE_ADMIN)
                         .anyRequest().authenticated())
                 .exceptionHandling(ex -> ex
                         .authenticationEntryPoint((request, response, authException) ->

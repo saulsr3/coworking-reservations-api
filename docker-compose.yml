@@ -16,5 +16,25 @@ services:
       timeout: 5s
       retries: 5
 
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: coworking-app
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: coworking
+      DB_USER: coworking
+      DB_PASSWORD: coworking
+      JWT_SECRET: change-this-secret-in-prod-min-32-chars-long
+      PAYMENT_GATEWAY_URL: http://localhost:8080
+    ports:
+      - "8080:8080"
+
 volumes:
   coworking_pgdata:
